@@ -93,6 +93,13 @@ make clean
 make
 ```
 
+```cmd
+set "PATH=D:\gcc\RISC-V Embedded GCC12\bin;%PATH%"
+where riscv-none-embed-gcc
+make clean
+make
+```
+
 输出文件：
 
 ```text
