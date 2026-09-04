@@ -1,3 +1,2 @@
-# Ignore generated build artifacts, but keep the flashable firmware image.
-build/*
-!build/DAP_CH591F.hex
+# Ignore everything under build except .hex files
+/build/*
