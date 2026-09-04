@@ -48,16 +48,18 @@
 				"post_script": "",
 				"post_script_description": "",
 				"excludeResources": [
-					"${project}/StdPeriphDriver/CH59x_usbhostClass.c",
-					"${project}/StdPeriphDriver/CH59x_usbhostBase.c",
-					"${project}/StdPeriphDriver/CH59x_usbdev.c",
-					"${project}/StdPeriphDriver/CH59x_uart3.c",
-					"${project}/StdPeriphDriver/CH59x_timer3.c",
-					"${project}/StdPeriphDriver/CH59x_timer2.c",
-					"${project}/StdPeriphDriver/CH59x_timer1.c",
-					"${project}/StdPeriphDriver/CH59x_timer0.c",
-					"${project}/StdPeriphDriver/CH59x_spi0.c",
-					"${project}/StdPeriphDriver/CH59x_pwm.c"
+					"${project}/SRC/StdPeriphDriver/CH59x_usbhostClass.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_usbhostBase.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_usbdev.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_uart3.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_timer3.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_timer2.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_timer1.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_timer0.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_spi0.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_pwm.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_lcd.c",
+					"${project}/SRC/StdPeriphDriver/CH59x_i2c.c"
 				],
 				"optimization": {
 					"level": "size",
@@ -133,13 +135,17 @@
 					"preprocessor": {
 						"do_not_search_system_directories": false,
 						"preprocess_only": false,
-						"defined_symbols": [],
+						"defined_symbols": [
+							"DEBUG=Debug_UART1",
+							"FIRMWARE_ROLE=1"
+						],
 						"undefined_symbols": []
 					},
 					"includes": {
 						"include_paths": [
 							"${project}/SRC/StdPeriphDriver/inc",
 							"${project}/SRC/RVMSIS",
+							"${project}/SRC/LIB",
 							"${project}/HAL/include",
 							"${project}/APP/include",
 							"${project}/APP",
@@ -224,11 +230,13 @@
 					},
 					"libraries": {
 						"libraries": [
+							"CH59xBLE",
 							"ISP592"
 						],
 						"library_search_path": [
 							"../",
-							"${project}/SRC/StdPeriphDriver"
+							"${project}/SRC/StdPeriphDriver",
+							"${project}/SRC/LIB"
 						]
 					},
 					"miscellaneous": {
@@ -265,11 +273,13 @@
 					},
 					"libraries": {
 						"libraries": [
+							"CH59xBLE",
 							"ISP592"
 						],
 						"library_search_path": [
 							"../",
-							"${project}/SRC/StdPeriphDriver"
+							"${project}/SRC/StdPeriphDriver",
+							"${project}/SRC/LIB"
 						]
 					},
 					"miscellaneous": {
@@ -427,7 +437,7 @@
 			},
 			"debugInRAM": false
 		},
-		"svdpath": null,
+		"svdpath": "${WCH:SDK:default}/RISC-V/CH59X/NoneOS/CH59Xxx.svd",
 		"output": {
 			"showDebugGDBTrace": true,
 			"saveDebugOutputToFile": false,
@@ -441,8 +451,10 @@
 			"ATTR_BUILD_BEFORE_LAUNCH_ATTR": 2,
 			"GdbServerAllocateConsole": true,
 			"GdbServerAllocateTelnetConsole": false,
+			"SkipDownloadBeforeDebug": false,
 			"StartGdbCLient": true,
-			"UPDATE_THREADLIST_ON_SUSPEND": false
+			"UPDATE_THREADLIST_ON_SUSPEND": false,
+			"DebugInRam": false
 		}
 	}
 }

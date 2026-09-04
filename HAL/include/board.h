@@ -39,9 +39,26 @@
 #define DAP_TDO_PORT            A
 #define DAP_TDO_PIN             GPIO_Pin_15
 
-#define ACTIVITY_LED_PORT       B
-#define ACTIVITY_LED_PIN        GPIO_Pin_23
-#define ACTIVITY_LED_ACTIVE_HIGH 1  /* 1：高电平点亮；0：低电平点亮 */
+/* DAPLink 和 USB Dongle 的 LED 可独立修改。 */
+#define DAPLINK_LED_PORT          B
+#define DAPLINK_LED_PIN           GPIO_Pin_23
+#define DAPLINK_LED_ACTIVE_HIGH   1  /* 1：高电平点亮；0：低电平点亮 */
+
+#define USB_DONGLE_LED_PORT        B
+#define USB_DONGLE_LED_PIN         GPIO_Pin_23
+#define USB_DONGLE_LED_ACTIVE_HIGH 1  /* 1：高电平点亮；0：低电平点亮 */
+
+#include "firmware_config.h"
+
+#if FIRMWARE_ROLE == FIRMWARE_ROLE_USB_DONGLE
+#define ACTIVITY_LED_PORT          USB_DONGLE_LED_PORT
+#define ACTIVITY_LED_PIN           USB_DONGLE_LED_PIN
+#define ACTIVITY_LED_ACTIVE_HIGH   USB_DONGLE_LED_ACTIVE_HIGH
+#else
+#define ACTIVITY_LED_PORT          DAPLINK_LED_PORT
+#define ACTIVITY_LED_PIN           DAPLINK_LED_PIN
+#define ACTIVITY_LED_ACTIVE_HIGH   DAPLINK_LED_ACTIVE_HIGH
+#endif
 
 /* GPIO 辅助宏：增加一层宏展开，使端口宏能先展开为 A 或 B。 */
 #define BOARD_GPIO_REG_IMPL(port, reg)       R32_P##port##_##reg

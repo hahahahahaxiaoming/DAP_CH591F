@@ -107,10 +107,28 @@ make
 输出文件：
 
 ```text
-build/DAP_CH591F.elf
-build/DAP_CH591F.hex
-build/DAP_CH591F.map
+build/daplink/DAPLink.elf
+build/daplink/DAPLink.hex
+build/usbdongle/USB_Dongle.elf
+build/usbdongle/USB_Dongle.hex
 ```
+
+`make` 一次生成 DAPLink 与 USB Dongle 两套固件；也可分别执行 `make daplink`
+或 `make usbdongle`。DAPLink 对应 `FIRMWARE_ROLE=1`，USB Dongle 对应
+`FIRMWARE_ROLE=0`。MounRiver 工程默认生成 DAPLink 固件。
+
+## 无线配对与传输
+
+- 没有有效配对记录时，双方在 Channel 0 工作，USB Dongle 每 100 ms 发送一次配对请求。
+- DAPLink 只接受 RSSI 大于 -50 dBm 的首次配对请求。
+- USB Dongle 随机生成 Channel 1～39 和 64 位配对 ID，并在新信道完成二次确认。
+- 配对成功后参数保存到 DataFlash；已有有效记录时不再接受其他设备的配对请求。
+- 配对期间 LED 闪烁，成功后熄灭；DAP 数据传输时 LED 短暂点亮。
+- 无线 DAP 使用序号、校验和、超时重传和响应缓存，避免重传时重复执行同一条目标命令。
+- DAPLink 的本地 USB 已配置时只执行有线 DAP；USB 断开后才处理无线 DAP 请求。
+
+USB Dongle 固件只枚举 CMSIS-DAP WinUSB 接口，不初始化 UART0、SWD 或 JTAG 引脚。
+DAPLink 固件继续枚举 CMSIS-DAP 与 CDC0 复合设备。
 
 MounRiver Studio 的 `.cproject` 已加入 DAP、CherryUSB 和 CherryRB 头文件路径。若 IDE
 仍使用旧的 `obj` 自动生成文件，请执行一次 Clean Project，让 IDE 重新生成构建文件。
@@ -140,19 +158,23 @@ UART1 日志会输出 UART0 的波特率设置和实际收发数据：
 UART0、UART1 的接收 FIFO 均配置为 1 字节触发中断；收到数据后立即写入
 CherryRB，以降低短数据包的接收延迟。
 
-PB23 活动 LED 默认按高电平点亮设计，每次 DAP 或 CDC0 收发至少保持约 50 ms。
-`HAL/include/board.h` 中的 `ACTIVITY_LED_ACTIVE_HIGH` 设为 `1` 表示高电平点亮，
-设为 `0` 表示低电平点亮。
+DAPLink 和 USB Dongle 的活动 LED 均默认使用 PB23、高电平点亮，配置彼此独立。
+在 `HAL/include/board.h` 中分别修改 `DAPLINK_LED_PORT/PIN/ACTIVE_HIGH` 和
+`USB_DONGLE_LED_PORT/PIN/ACTIVE_HIGH` 即可；`ACTIVE_HIGH` 为 `1` 表示高电平点亮，
+为 `0` 表示低电平点亮。固件会根据 `FIRMWARE_ROLE` 自动选用对应角色的 LED。
 
 ## 目录
 
 ```text
 APP/dap_main.c                  USB 复合设备与 8 深度 DAP/CDC 数据通路
+APP/RF_PHY.c                    CH592 2.4 GHz 基础收发驱动
+APP/wireless_dap.c              配对状态机和无线 CMSIS-DAP 可靠传输
+APP/include/wireless_dap.h      固件角色与无线 DAP 接口
 HAL/include/board.h             DAP 调试信号和活动 LED 的端口、引脚配置
 DAP/                            CMSIS-DAP v2.1 协议实现
 HAL/uart.c                      UART0/UART1 驱动及已禁用的 UART2 预留代码
-HAL/activity_led.c              PB23 共用活动 LED
-HAL/hal_time.c                  系统自由运行 SysTick 时基（不开中断）
+HAL/activity_led.c              按固件角色选择的活动 LED
+HAL/flash_save.c                无线配对参数的 DataFlash 持久化
 ThirdParty/CherryUSB/           CherryUSB Device 栈及 CH58x/CH59x USBFS 端口
 ThirdParty/CherryRB/            USB 到 UART 的环形缓冲区
 Makefile                        可复现的命令行构建入口

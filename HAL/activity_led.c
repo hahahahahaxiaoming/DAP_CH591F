@@ -1,7 +1,6 @@
 #include "CH59x_common.h"
 #include "activity_led.h"
 #include "board.h"
-#include "hal_time.h"
 
 #define ACTIVITY_LED_TICKS     (60000000U / 20U) /* 50 ms at 60 MHz */
 
@@ -27,13 +26,19 @@ void activity_led_init(void)
 void activity_led_pulse(void)
 {
     ACTIVITY_LED_ON();
-    led_off_time = HAL_TimeNow() + ACTIVITY_LED_TICKS;
+    led_off_time = SYS_GetSysTickCnt() + ACTIVITY_LED_TICKS;
     led_active = 1;
+}
+
+void activity_led_off(void)
+{
+    ACTIVITY_LED_OFF();
+    led_active = 0;
 }
 
 void activity_led_poll(void)
 {
-    if (led_active && (int32_t)(HAL_TimeNow() - led_off_time) >= 0) {
+    if (led_active && (int32_t)(SYS_GetSysTickCnt() - led_off_time) >= 0) {
         ACTIVITY_LED_OFF();
         led_active = 0;
     }

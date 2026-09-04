@@ -98,6 +98,23 @@ typedef struct
 
 #define PFIC_EnableAllIRQ()     {write_csr(0x800, 0x88);__nop();__nop();}
 #define PFIC_DisableAllIRQ()    {write_csr(0x800, 0x80);__nop();__nop();}
+
+/* 新版 CH59x 外设库使用的全局中断保存/恢复接口。 */
+__attribute__((always_inline)) RV_STATIC_INLINE uint32_t __risc_v_enable_irq(uint32_t mpie_mie)
+{
+    uint32_t result;
+    __asm volatile ("csrrs %0, 0x800, %1"
+                    : "=r"(result) : "r"(mpie_mie) : "memory");
+    return result;
+}
+
+__attribute__((always_inline)) RV_STATIC_INLINE uint32_t __risc_v_disable_irq(void)
+{
+    uint32_t result;
+    __asm volatile ("csrrc %0, 0x800, %1"
+                    : "=r"(result) : "r"(0x88) : "memory");
+    return result & 0x88;
+}
 /* ##########################   PFIC functions  #################################### */
 
 /*******************************************************************************
