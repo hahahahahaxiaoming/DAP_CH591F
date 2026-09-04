@@ -17,6 +17,47 @@ USB CDC ACM 虚拟串口。UART1 保留为固件日志串口，UART2 已通过 `
 - USB Full Speed 设备
 - 默认开启片内 DC/DC 转换器以降低运行功耗
 
+## 快速编译
+
+本工程使用 `Makefile` 直接编译，不依赖 IDE。先确认已经安装 WCH/MounRiver 的
+RISC-V Embedded GCC 工具链，并确认 `riscv-none-embed-gcc` 在 `PATH` 中。
+
+Windows PowerShell 示例：
+
+```powershell
+$env:Path = 'D:\gcc\RISC-V Embedded GCC12\bin;' + $env:Path
+make clean
+make
+```
+
+Windows CMD 示例：
+
+```cmd
+set "PATH=D:\gcc\RISC-V Embedded GCC12\bin;%PATH%"
+where riscv-none-embed-gcc
+make clean
+make
+```
+
+编译完成后，输出文件在：
+
+```text
+build/daplink/DAPLink.elf
+build/daplink/DAPLink.hex
+build/usbdongle/USB_Dongle.elf
+build/usbdongle/USB_Dongle.hex
+```
+
+如果只想编译单套固件，可执行：
+
+```sh
+make daplink
+make usbdongle
+```
+
+`make` 默认会生成两套固件；DAPLink 对应 `FIRMWARE_ROLE=1`，USB Dongle 对应
+`FIRMWARE_ROLE=0`。
+
 ## 引脚分配
 
 `SWCLK`、`SWDIO`、`nRESET`、`TDI`、`TDO` 和活动 LED 的端口、引脚可在

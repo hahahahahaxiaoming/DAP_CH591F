@@ -1,2 +1,4 @@
 # Ignore everything under build except .hex files
 /build/*
+/obj/*
+/.mrs/*
