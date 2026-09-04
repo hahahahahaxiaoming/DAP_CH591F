@@ -10,7 +10,7 @@ extern "C" {
 // --- 宏控制开关 ---
 #define USE_UART0   1  // 为1时启用UART0
 #define USE_UART1   1  // 为1时启用UART1,LOG
-#define USE_UART2   1  // 为1时启用UART2
+#define USE_UART2   0  // 为1时启用UART2
 
 // 定义各个串口缓冲区大小（单位：字节）
 // 建议：尽量使用 2 的 N 次方 (如 64, 128, 256, 512)

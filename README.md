@@ -2,7 +2,7 @@
 
 本工程将 CherryDAP、CherryUSB 和 CherryRB 的必要部分移植到 CH592，实现一个最小的
 CMSIS-DAP v2 调试器。当前启用 SWD 和标准 JTAG，不启用 SWO、MSC 和 WebUSB，同时提供一路
-USB CDC ACM 虚拟串口。UART1 保留为固件日志串口，UART2 驱动保留但暂不启用。
+USB CDC ACM 虚拟串口。UART1 保留为固件日志串口，UART2 已通过 `USE_UART2=0` 禁用。
 
 ## 功能
 
@@ -11,12 +11,16 @@ USB CDC ACM 虚拟串口。UART1 保留为固件日志串口，UART2 驱动保�
 - 标准 JTAG 调试和下载
 - 目标硬件复位 nRESET（PA11，开漏输出）
 - CDC0 对应 CH592 UART0
-- UART2 初始化和中断代码保留，当前不加入 USB 复合设备
+- UART2 初始化和中断代码保留，但通过 `USE_UART2=0` 排除编译且不加入 USB 复合设备
 - UART1 输出固件日志
-- PB12 通用活动 LED：DAP 和 CDC0 收发均闪烁
+- PB23 通用活动 LED：DAP 和 CDC0 收发均闪烁
 - USB Full Speed 设备
+- 默认开启片内 DC/DC 转换器以降低运行功耗
 
 ## 引脚分配
+
+`SWCLK`、`SWDIO`、`nRESET`、`TDI`、`TDO` 和活动 LED 的端口、引脚可在
+`HAL/include/board.h` 中修改。端口宏填写 `A` 或 `B`，UART 和 USB 引脚保持固定。
 
 | 功能 | CH592 引脚 | 方向（相对 CH592） | 说明 |
 | --- | --- | --- | --- |
@@ -27,11 +31,11 @@ USB CDC ACM 虚拟串口。UART1 保留为固件日志串口，UART2 驱动保�
 | nRESET | PA11 | 开漏输出 | 低电平复位目标芯片，目标侧需要上拉 |
 | CDC0 TX | PB7 | 输出 | UART0 TX，连接外部设备 RX |
 | CDC0 RX | PB4 | 输入 | UART0 RX，连接外部设备 TX |
-| 预留 UART2 TX | PB23 | 输出 | 驱动代码保留，当前不初始化、不枚举 CDC1 |
-| 预留 UART2 RX | PB22 | 输入 | 驱动代码保留，当前不初始化、不枚举 CDC1 |
+| 预留 UART2 TX | PB23 | 输出 | `USE_UART2=0`，当前不占用、不枚举 CDC1 |
+| 预留 UART2 RX | PB22 | 输入 | `USE_UART2=0`，当前不占用、不枚举 CDC1 |
 | LOG TX | PA9 | 输出 | UART1 TX，默认日志口 |
 | LOG RX | PA8 | 输入 | UART1 RX，当前日志功能通常不需要连接 |
-| 活动 LED | PB12 | 输出 | 默认低电平点亮，DAP 和 CDC0 收发共用 |
+| 活动 LED | PB23 | 输出 | 默认高电平点亮，DAP 和 CDC0 收发共用 |
 
 目标 SWD 接口至少应引出 `SWCLK`、`SWDIO`、`GND` 和 `VTref`，建议同时连接
 `nRESET`。VTref 当前不接入 ADC，仅用于确认调试器与目标板使用兼容的 IO 电压。
@@ -41,7 +45,7 @@ USB D+/D-
 
 PB14/PB15 建议保留给 CH592 自身的 WCH 调试接口，不用于目标 SWD。
 
-标准 JTAG 与 SWD 使用 PA11～PA15：
+标准 JTAG 与 SWD 默认使用 PA11～PA15：
 
 | JTAG 信号 | CH592 引脚 | 方向（相对 CH592） |
 | --- | --- | --- |
@@ -133,19 +137,21 @@ UART1 日志会输出 UART0 的波特率设置和实际收发数据：
 ```
 
 其中 `TX` 表示 USB CDC 发往 UART0，`RX` 表示 UART0 收到后发往 USB CDC。
-UART0、UART1、UART2 的接收 FIFO 均配置为 1 字节触发中断；收到数据后立即写入
+UART0、UART1 的接收 FIFO 均配置为 1 字节触发中断；收到数据后立即写入
 CherryRB，以降低短数据包的接收延迟。
 
-PB12 活动 LED 默认按低电平点亮设计，每次 DAP 或 CDC0 收发至少保持约 50 ms。若硬件为
-高电平点亮，将 `HAL/activity_led.c` 中的 `ACTIVITY_LED_ACTIVE_LOW` 改为 `0`。
+PB23 活动 LED 默认按高电平点亮设计，每次 DAP 或 CDC0 收发至少保持约 50 ms。
+`HAL/include/board.h` 中的 `ACTIVITY_LED_ACTIVE_HIGH` 设为 `1` 表示高电平点亮，
+设为 `0` 表示低电平点亮。
 
 ## 目录
 
 ```text
 APP/dap_main.c                  USB 复合设备与 8 深度 DAP/CDC 数据通路
+HAL/include/board.h             DAP 调试信号和活动 LED 的端口、引脚配置
 DAP/                            CMSIS-DAP v2.1 协议实现
-HAL/uart.c                      UART0/UART1/UART2 驱动，接收端统一使用 CherryRB
-HAL/activity_led.c              PB12 共用活动 LED
+HAL/uart.c                      UART0/UART1 驱动及已禁用的 UART2 预留代码
+HAL/activity_led.c              PB23 共用活动 LED
 HAL/hal_time.c                  系统自由运行 SysTick 时基（不开中断）
 ThirdParty/CherryUSB/           CherryUSB Device 栈及 CH58x/CH59x USBFS 端口
 ThirdParty/CherryRB/            USB 到 UART 的环形缓冲区

@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 
+/* Enable the internal DC/DC converter by default to reduce power consumption. */
+#ifndef DCDC_ENABLE
+#define DCDC_ENABLE TRUE
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

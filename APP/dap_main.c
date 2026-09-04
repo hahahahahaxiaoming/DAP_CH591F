@@ -225,6 +225,7 @@ void usbd_cdc_acm_set_line_coding(uint8_t busid,uint8_t intf,struct cdc_line_cod
     (void)busid; (void)intf; line_coding=*c;
     if(c->dwDTERate) {
         UART0_BaudRateCfg(c->dwDTERate);
+        activity_led_pulse();
     }
 }
 void usbd_cdc_acm_get_line_coding(uint8_t busid,uint8_t intf,struct cdc_line_coding *c) {

@@ -46,6 +46,7 @@ This information includes:
 
 #include "stdint.h"
 #include "CH59x_common.h"
+#include "board.h"
 
 #ifndef   __STATIC_INLINE
 #define __STATIC_INLINE                        static inline
@@ -75,7 +76,7 @@ This information includes:
 
 /// Indicate that JTAG communication mode is available at the Debug Port.
 /// This information is returned by the command \ref DAP_Info as part of <b>Capabilities</b>.
-#define DAP_JTAG                1               ///< JTAG uses PA12..PA15; PA11 is target nRESET.
+#define DAP_JTAG                1               ///< JTAG enabled; configurable pins are in board.h.
 
 /// Configure maximum number of JTAG devices on the scan chain connected to the Debug Access Port.
 /// This setting impacts the RAM requirements of the Debug Unit. Valid range is 1 .. 255.
@@ -316,12 +317,17 @@ Configures the DAP Hardware I/O pins for JTAG mode:
  - TDO to input mode.
 */
 __STATIC_INLINE void PORT_JTAG_SETUP (void) {
-  R32_PA_OUT |= GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14;
-  R32_PA_DIR |= GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14;
-  R32_PA_OUT &= ~GPIO_Pin_11;
-  R32_PA_PD_DRV &= ~GPIO_Pin_11;
-  R32_PA_PU |= GPIO_Pin_11;
-  R32_PA_DIR &= ~(GPIO_Pin_11 | GPIO_Pin_15); /* release nRESET */
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, OUT) |= DAP_SWCLK_PIN;
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, DIR) |= DAP_SWCLK_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, OUT) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, DIR) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_TDI_PORT, OUT) |= DAP_TDI_PIN;
+  BOARD_GPIO_REG(DAP_TDI_PORT, DIR) |= DAP_TDI_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, OUT) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PD_DRV) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PU) |= DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, DIR) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_TDO_PORT, DIR) &= ~DAP_TDO_PIN;
 }
 
 /** Setup SWD I/O pins: SWCLK, SWDIO, and nRESET.
@@ -330,12 +336,16 @@ Configures the DAP Hardware I/O pins for Serial Wire Debug (SWD) mode:
  - TDI, nTRST to HighZ mode (pins are unused in SWD mode).
 */
 __STATIC_INLINE void PORT_SWD_SETUP (void) {
-  R32_PA_OUT |= GPIO_Pin_12 | GPIO_Pin_13;
-  R32_PA_DIR |= GPIO_Pin_12 | GPIO_Pin_13;
-  R32_PA_OUT &= ~GPIO_Pin_11;
-  R32_PA_PD_DRV &= ~GPIO_Pin_11;
-  R32_PA_PU |= GPIO_Pin_11;
-  R32_PA_DIR &= ~GPIO_Pin_11; /* release nRESET */
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, OUT) |= DAP_SWCLK_PIN;
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, DIR) |= DAP_SWCLK_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, OUT) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, DIR) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, OUT) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PD_DRV) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PU) |= DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, DIR) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_TDI_PORT, DIR) &= ~DAP_TDI_PIN;
+  BOARD_GPIO_REG(DAP_TDO_PORT, DIR) &= ~DAP_TDO_PIN;
 }
 
 /** Disable JTAG/SWD I/O Pins.
@@ -344,10 +354,16 @@ Disables the DAP Hardware I/O pins which configures:
 */
 __STATIC_INLINE void PORT_OFF (void) {
   /* Keep SWDIO and nRESET weakly pulled high while idle. */
-  R32_PA_PD_DRV &= ~(GPIO_Pin_11 | GPIO_Pin_13);
-  R32_PA_PU |= GPIO_Pin_11 | GPIO_Pin_13;
-  R32_PA_DIR &= ~(GPIO_Pin_10 | GPIO_Pin_11 | GPIO_Pin_12 |
-                  GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15);
+  R32_PA_DIR &= ~GPIO_Pin_10;
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, DIR) &= ~DAP_SWCLK_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, PD_DRV) &= ~DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, PU) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, DIR) &= ~DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PD_DRV) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, PU) |= DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_NRESET_PORT, DIR) &= ~DAP_NRESET_PIN;
+  BOARD_GPIO_REG(DAP_TDI_PORT, DIR) &= ~DAP_TDI_PIN;
+  BOARD_GPIO_REG(DAP_TDO_PORT, DIR) &= ~DAP_TDO_PIN;
 }
 
 
@@ -357,21 +373,21 @@ __STATIC_INLINE void PORT_OFF (void) {
 \return Current status of the SWCLK/TCK DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWCLK_TCK_IN  (void) {
-  return ((R32_PA_PIN & GPIO_Pin_12) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_SWCLK_PORT, PIN) & DAP_SWCLK_PIN) ? 1U : 0U);
 }
 
 /** SWCLK/TCK I/O pin: Set Output to High.
 Set the SWCLK/TCK DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_SET (void) {
-  R32_PA_OUT |= GPIO_Pin_12;
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, OUT) |= DAP_SWCLK_PIN;
 }
 
 /** SWCLK/TCK I/O pin: Set Output to Low.
 Set the SWCLK/TCK DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
-  R32_PA_CLR = GPIO_Pin_12;
+  BOARD_GPIO_REG(DAP_SWCLK_PORT, CLR) = DAP_SWCLK_PIN;
 }
 
 
@@ -381,28 +397,28 @@ __STATIC_FORCEINLINE void     PIN_SWCLK_TCK_CLR (void) {
 \return Current status of the SWDIO/TMS DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWDIO_TMS_IN  (void) {
-  return ((R32_PA_PIN & GPIO_Pin_13) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_SWDIO_PORT, PIN) & DAP_SWDIO_PIN) ? 1U : 0U);
 }
 
 /** SWDIO/TMS I/O pin: Set Output to High.
 Set the SWDIO/TMS DAP hardware I/O pin to high level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_SET (void) {
-  R32_PA_OUT |= GPIO_Pin_13;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, OUT) |= DAP_SWDIO_PIN;
 }
 
 /** SWDIO/TMS I/O pin: Set Output to Low.
 Set the SWDIO/TMS DAP hardware I/O pin to low level.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_TMS_CLR (void) {
-  R32_PA_CLR = GPIO_Pin_13;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, CLR) = DAP_SWDIO_PIN;
 }
 
 /** SWDIO I/O pin: Get Input (used in SWD mode only).
 \return Current status of the SWDIO DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_SWDIO_IN      (void) {
-  return ((R32_PA_PIN & GPIO_Pin_13) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_SWDIO_PORT, PIN) & DAP_SWDIO_PIN) ? 1U : 0U);
 }
 
 /** SWDIO I/O pin: Set Output (used in SWD mode only).
@@ -410,8 +426,8 @@ __STATIC_FORCEINLINE uint32_t PIN_SWDIO_IN      (void) {
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_OUT     (uint32_t bit) {
   /* CherryDAP passes a shifted value here; only bit 0 is the wire value. */
-  if (bit & 1U) R32_PA_OUT |= GPIO_Pin_13;
-  else     R32_PA_CLR = GPIO_Pin_13;
+  if (bit & 1U) BOARD_GPIO_REG(DAP_SWDIO_PORT, OUT) |= DAP_SWDIO_PIN;
+  else          BOARD_GPIO_REG(DAP_SWDIO_PORT, CLR) = DAP_SWDIO_PIN;
 }
 
 /** SWDIO I/O pin: Switch to Output mode (used in SWD mode only).
@@ -420,8 +436,8 @@ called prior \ref PIN_SWDIO_OUT function calls.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_OUT_ENABLE  (void) {
   /* Match the proven DAPLink ports: preload low before taking the bus. */
-  R32_PA_CLR = GPIO_Pin_13;
-  R32_PA_DIR |= GPIO_Pin_13;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, CLR) = DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, DIR) |= DAP_SWDIO_PIN;
 }
 
 /** SWDIO I/O pin: Switch to Input mode (used in SWD mode only).
@@ -430,8 +446,8 @@ called prior \ref PIN_SWDIO_IN function calls.
 */
 __STATIC_FORCEINLINE void     PIN_SWDIO_OUT_DISABLE (void) {
   /* Preload high before releasing SWDIO so the pull-up owns turnaround. */
-  R32_PA_OUT |= GPIO_Pin_13;
-  R32_PA_DIR &= ~GPIO_Pin_13;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, OUT) |= DAP_SWDIO_PIN;
+  BOARD_GPIO_REG(DAP_SWDIO_PORT, DIR) &= ~DAP_SWDIO_PIN;
 }
 
 
@@ -441,15 +457,15 @@ __STATIC_FORCEINLINE void     PIN_SWDIO_OUT_DISABLE (void) {
 \return Current status of the TDI DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_TDI_IN  (void) {
-  return ((R32_PA_PIN & GPIO_Pin_14) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_TDI_PORT, PIN) & DAP_TDI_PIN) ? 1U : 0U);
 }
 
 /** TDI I/O pin: Set Output.
 \param bit Output value for the TDI DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
-  if (bit & 1U) R32_PA_OUT |= GPIO_Pin_14;
-  else     R32_PA_OUT &= ~GPIO_Pin_14;
+  if (bit & 1U) BOARD_GPIO_REG(DAP_TDI_PORT, OUT) |= DAP_TDI_PIN;
+  else          BOARD_GPIO_REG(DAP_TDI_PORT, OUT) &= ~DAP_TDI_PIN;
 }
 
 
@@ -459,7 +475,7 @@ __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
 \return Current status of the TDO DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_TDO_IN  (void) {
-  return ((R32_PA_PIN & GPIO_Pin_15) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_TDO_PORT, PIN) & DAP_TDO_PIN) ? 1U : 0U);
 }
 
 
@@ -487,7 +503,7 @@ __STATIC_FORCEINLINE void     PIN_nTRST_OUT  (uint32_t bit) {
 \return Current status of the nRESET DAP hardware I/O pin.
 */
 __STATIC_FORCEINLINE uint32_t PIN_nRESET_IN  (void) {
-  return ((R32_PA_PIN & GPIO_Pin_11) ? 1U : 0U);
+  return ((BOARD_GPIO_REG(DAP_NRESET_PORT, PIN) & DAP_NRESET_PIN) ? 1U : 0U);
 }
 
 /** nRESET I/O pin: Set Output.
@@ -497,10 +513,10 @@ __STATIC_FORCEINLINE uint32_t PIN_nRESET_IN  (void) {
 */
 __STATIC_FORCEINLINE void     PIN_nRESET_OUT (uint32_t bit) {
   if (bit & 1U) {
-    R32_PA_DIR &= ~GPIO_Pin_11; /* open-drain release */
+    BOARD_GPIO_REG(DAP_NRESET_PORT, DIR) &= ~DAP_NRESET_PIN; /* open-drain release */
   } else {
-    R32_PA_CLR = GPIO_Pin_11;
-    R32_PA_DIR |= GPIO_Pin_11;  /* drive target reset low */
+    BOARD_GPIO_REG(DAP_NRESET_PORT, CLR) = DAP_NRESET_PIN;
+    BOARD_GPIO_REG(DAP_NRESET_PORT, DIR) |= DAP_NRESET_PIN;  /* drive target reset low */
   }
 }
 
