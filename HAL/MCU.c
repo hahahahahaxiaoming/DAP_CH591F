@@ -14,6 +14,12 @@
 /* 头文件包含 */
 #include "HAL.h"
 
+/* Application hook: RF calibration resets the private 2.4 GHz radio state.
+ * Projects without a wireless user may leave the weak default unchanged. */
+__attribute__((weak)) void HAL_RFCalibrationComplete(void)
+{
+}
+
 tmosTaskID halTaskID;
 uint32_t g_LLE_IRQLibHandlerLocation;
 /*******************************************************************************
@@ -220,6 +226,7 @@ tmosEvents HAL_ProcessEvent(tmosTaskID task_id, tmosEvents events)
         R8_XT32K_TUNE = x32Kpw; // LSE驱动电流降低到额定电流
         sys_safe_access_disable();
 #endif
+        HAL_RFCalibrationComplete();
         tmos_start_task(halTaskID, HAL_REG_INIT_EVENT, MS1_TO_SYSTEM_TIME(BLE_CALIBRATION_PERIOD));
         return events ^ HAL_REG_INIT_EVENT;
 #endif

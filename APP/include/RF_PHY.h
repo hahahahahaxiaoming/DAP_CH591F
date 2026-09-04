@@ -16,7 +16,8 @@ typedef enum
 {
     RF_PHY_EVENT_TX_DONE = 0,
     RF_PHY_EVENT_TX_FAILED,
-    RF_PHY_EVENT_RX_DATA
+    RF_PHY_EVENT_RX_DATA,
+    RF_PHY_EVENT_RX_FAILED
 } rf_phy_event_t;
 
 /* 回调运行在射频中断中：只能复制数据或投递 TMOS 事件。 */

@@ -5,10 +5,14 @@ SIZE     := $(TOOLPREFIX)size
 BUILD    ?= build/daplink
 TARGET   ?= DAPLink
 ROLE     ?= 1
+DEBUG_LOG ?= 0
 
 ARCHFLAGS := -march=rv32imac -mabi=ilp32 -mcmodel=medany -msmall-data-limit=8 -mno-save-restore
 CFLAGS := $(ARCHFLAGS) -Os -g -std=gnu99 -ffunction-sections -fdata-sections -fno-common -fsigned-char \
-          -DDEBUG=Debug_UART1 -DFIRMWARE_ROLE=$(ROLE)
+          -DFIRMWARE_ROLE=$(ROLE)
+ifeq ($(DEBUG_LOG),1)
+CFLAGS += -DDEBUG=Debug_UART1
+endif
 INCLUDES := -ISRC/StdPeriphDriver/inc -ISRC/RVMSIS -ISRC/LIB -IHAL/include -IAPP/include -IAPP \
             -IDAP/Config -IDAP/Include -IThirdParty/CherryRB \
             -IThirdParty/CherryUSB/common -IThirdParty/CherryUSB/core \

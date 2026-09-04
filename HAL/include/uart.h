@@ -2,14 +2,24 @@
 #define __UART_H__
 
 #include "chry_ringbuffer.h"
+#include "firmware_config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // --- 宏控制开关 ---
-#define USE_UART0   1  // 为1时启用UART0
-#define USE_UART1   1  // 为1时启用UART1,LOG
+#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
+#define USE_UART0   1  // DAPLink RX 的目标串口
+#else
+#define USE_UART0   0  // Dongle 没有本地 UART0
+#endif
+
+#if defined(DEBUG)
+#define USE_UART1   1  // 调试阶段两种角色都使用 UART1 日志
+#else
+#define USE_UART1   0
+#endif
 #define USE_UART2   0  // 为1时启用UART2
 
 // 定义各个串口缓冲区大小（单位：字节）

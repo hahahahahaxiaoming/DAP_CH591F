@@ -9,18 +9,18 @@
  *   USB D-  ：PB10（已使用，由 CH592 硬件固定）
  *   USB D+  ：PB11（已使用，由 CH592 硬件固定）
  *
- *   UART0 RX：PB4 （已由 USB CDC0 使用）
- *   UART0 TX：PB7 （已由 USB CDC0 使用）
- *   UART1 RX：PA8 （仅定义 DEBUG 时使用）
- *   UART1 TX：PA9 （仅定义 DEBUG 时使用，作为固件日志口）
+ *   UART0 RX：PB4 （仅 DAPLink RX 的 CDC0 使用）
+ *   UART0 TX：PB7 （仅 DAPLink RX 的 CDC0 使用）
+ *   UART1 RX：PA8 （默认关闭日志时不占用；DEBUG 构建时使用）
+ *   UART1 TX：PA9 （默认关闭日志时不占用；DEBUG 构建时作为日志口）
  *   UART2 RX：PB22（USE_UART2=0，已禁用）
  *   UART2 TX：PB23（USE_UART2=0，已禁用）
  *   UART3 RX：PA4 （本固件未编译、未使用）
  *   UART3 TX：PA5 （本固件未编译、未使用）
  *
- * UART0 始终初始化；UART1 仅在 DEBUG 构建中初始化；UART2 已通过
- * USE_UART2 关闭；UART3 未使用。UART2 和 UART3 运行时不占用相应引脚。
- * 修改下方引脚配置时，请避开上述“已使用”的引脚。
+ * USB Dongle 正式功能只需要 USB D+/D- 和自己的 LED，不初始化 UART0、
+ * SWD 或 JTAG 引脚；仅 DEBUG 构建会额外初始化 UART1。DAPLink RX 才初始化
+ * UART0。UART2 已关闭，UART3 未使用。
  */
 
 /* 用户可配置的 GPIO：端口宏必须填写 A 或 B，不要填写 GPIOA 或 GPIOB。 */

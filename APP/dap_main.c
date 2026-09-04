@@ -11,27 +11,21 @@
 #include <string.h>
 
 #define USB_MPS 64
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
 #define CONFIG_TOTAL_LEN (9 + 23 + CDC_ACM_DESCRIPTOR_LEN)
-#else
-#define CONFIG_TOTAL_LEN (9 + 23)
-#endif
+#define CDC_UART_COALESCE_TICKS (60000000U / 500U) /* 2 ms at 60 MHz */
+#define CDC_USB_IN_TIMEOUT_TICKS (60000000U / 10U) /* 100 ms at 60 MHz */
+#define DEBUG_DATA_PREVIEW_SIZE 16U
+#define CDC_USB_OUT_BUFFER_SIZE 1024U
 
 static const uint8_t device_descriptor[] = {
     USB_DEVICE_DESCRIPTOR_INIT(USB_2_1, 0xEF, 0x02, 0x01, 0x0D28, 0x0204, 0x0100, 1)
 };
 static const uint8_t config_descriptor[] = {
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     USB_CONFIG_DESCRIPTOR_INIT(CONFIG_TOTAL_LEN, 3, 1, USB_CONFIG_BUS_POWERED, 200),
-#else
-    USB_CONFIG_DESCRIPTOR_INIT(CONFIG_TOTAL_LEN, 1, 1, USB_CONFIG_BUS_POWERED, 100),
-#endif
     USB_INTERFACE_DESCRIPTOR_INIT(0, 0, 2, 0xFF, 0, 0, 2),
     USB_ENDPOINT_DESCRIPTOR_INIT(DAP_OUT_EP, USB_ENDPOINT_TYPE_BULK, USB_MPS, 0),
     USB_ENDPOINT_DESCRIPTOR_INIT(DAP_IN_EP, USB_ENDPOINT_TYPE_BULK, USB_MPS, 0),
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     CDC_ACM_DESCRIPTOR_INIT(1, CDC0_INT_EP, CDC0_OUT_EP, CDC0_IN_EP, USB_MPS, 0),
-#endif
 };
 #define MSOS20_DESC_LEN 170
 static const uint8_t msos20_descriptor[] = {
@@ -98,20 +92,36 @@ static USB_MEM_ALIGNX uint8_t dap_request[DAP_PACKET_COUNT][DAP_PACKET_SIZE];
 static USB_MEM_ALIGNX uint8_t dap_response[DAP_PACKET_COUNT][DAP_PACKET_SIZE];
 static uint16_t dap_request_size[DAP_PACKET_COUNT];
 static uint16_t dap_response_size[DAP_PACKET_COUNT];
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
 static USB_MEM_ALIGNX uint8_t cdc_out_data[USB_MPS], cdc_in_data[USB_MPS];
-static USB_MEM_ALIGNX uint8_t cdc_uart_tx_pool[256];
+static USB_MEM_ALIGNX uint8_t cdc_uart_tx_pool[CDC_USB_OUT_BUFFER_SIZE];
 static chry_ringbuffer_t cdc_uart_tx_rb;
 static volatile uint8_t cdc_tx_busy;
+static uint32_t cdc_tx_deadline;
+static volatile uint32_t cdc_usb_out_dropped;
 static struct cdc_line_coding line_coding = {115200,0,0,8};
-#endif
+static uint8_t cdc_usb_out_pending[USB_MPS];
+static uint8_t cdc_usb_out_pending_length;
+static uint8_t cdc_uart_pending[USB_MPS];
+static uint8_t cdc_uart_pending_length;
+static uint32_t cdc_uart_observed_length;
+static uint32_t cdc_uart_quiet_deadline;
+static uint8_t cdc_config_pending[7];
+static volatile uint8_t cdc_config_pending_valid;
+
+static bool wired_usb_active(void)
+{
+    return usb_device_is_configured(0) && !usb_device_is_suspend(0);
+}
 
 static void log_uart_data(const char *direction, const uint8_t *data, uint32_t len)
 {
 #ifdef DEBUG
     uint32_t i;
+    uint32_t preview = len > DEBUG_DATA_PREVIEW_SIZE ?
+                       DEBUG_DATA_PREVIEW_SIZE : len;
     printf("[UART0 %s] %lu byte:", direction, (unsigned long)len);
-    for (i = 0; i < len; i++) printf(" %02X", data[i]);
+    for (i = 0; i < preview; i++) printf(" %02X", data[i]);
+    if(preview != len) printf(" ...");
     printf("\r\n");
 #else
     (void)direction; (void)data; (void)len;
@@ -155,10 +165,13 @@ static void log_dap_packet(const char *direction, const uint8_t *data, uint32_t 
 {
 #ifdef DEBUG
     uint32_t i;
+    uint32_t preview = len > DEBUG_DATA_PREVIEW_SIZE ?
+                       DEBUG_DATA_PREVIEW_SIZE : len;
     uint8_t command = len ? data[0] : 0xFFU;
     printf("[DAP %s] cmd=0x%02X(%s) len=%lu:", direction, command,
            dap_command_name(command), (unsigned long)len);
-    for (i = 0; i < len; i++) printf(" %02X", data[i]);
+    for (i = 0; i < preview; i++) printf(" %02X", data[i]);
+    if(preview != len) printf(" ...");
     printf("\r\n");
 #else
     (void)direction; (void)data; (void)len;
@@ -201,24 +214,22 @@ static void dap_in_cb(uint8_t busid,uint8_t ep,uint32_t nbytes) {
         dap_resp_idle = 1U;
     }
 }
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
 static void cdc_out_cb(uint8_t busid,uint8_t ep,uint32_t nbytes) {
+    uint32_t written;
     (void)busid;
     activity_led_pulse();
-    chry_ringbuffer_write(&cdc_uart_tx_rb,cdc_out_data,nbytes);
+    written = chry_ringbuffer_write(&cdc_uart_tx_rb,cdc_out_data,nbytes);
+    cdc_usb_out_dropped += nbytes - written;
     usbd_ep_start_read(0,ep,cdc_out_data,USB_MPS);
 }
 static void cdc_in_cb(uint8_t busid,uint8_t ep,uint32_t nbytes) {
-    (void)busid;(void)ep;(void)nbytes; cdc_tx_busy=0;
+    (void)busid;(void)ep;
+    PRINT("[USB CDC IN DONE] %lu byte\n", (unsigned long)nbytes);
+    cdc_tx_busy=0;
 }
-#endif
 static struct usbd_endpoint dap_out={DAP_OUT_EP,dap_out_cb},dap_in={DAP_IN_EP,dap_in_cb};
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
 static struct usbd_endpoint cdc0_out={CDC0_OUT_EP,cdc_out_cb},cdc0_in={CDC0_IN_EP,cdc_in_cb};
 static struct usbd_interface dap_intf,cdc0_ctrl,cdc0_data;
-#else
-static struct usbd_interface dap_intf;
-#endif
 
 static void dap_serial_init(void) {
     static const char hex[] = "0123456789ABCDEF";
@@ -243,57 +254,214 @@ void usbd_event_handler(uint8_t busid,uint8_t event) {
         dap_req_idle = 0U;
         dap_resp_idle = 1U;
         usbd_ep_start_read(0,DAP_OUT_EP,dap_request[0],DAP_PACKET_SIZE);
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
         usbd_ep_start_read(0,CDC0_OUT_EP,cdc_out_data,USB_MPS);
-#endif
     }
 }
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
 void usbd_cdc_acm_set_line_coding(uint8_t busid,uint8_t intf,struct cdc_line_coding *c) {
     (void)busid; (void)intf; line_coding=*c;
     if(c->dwDTERate) {
+#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
         UART0_BaudRateCfg(c->dwDTERate);
+#else
+        cdc_config_pending[0] = (uint8_t)c->dwDTERate;
+        cdc_config_pending[1] = (uint8_t)(c->dwDTERate >> 8);
+        cdc_config_pending[2] = (uint8_t)(c->dwDTERate >> 16);
+        cdc_config_pending[3] = (uint8_t)(c->dwDTERate >> 24);
+        cdc_config_pending[4] = c->bCharFormat;
+        cdc_config_pending[5] = c->bParityType;
+        cdc_config_pending[6] = c->bDataBits;
+        cdc_config_pending_valid = 1U;
+#endif
         activity_led_pulse();
     }
 }
 void usbd_cdc_acm_get_line_coding(uint8_t busid,uint8_t intf,struct cdc_line_coding *c) {
     (void)busid; (void)intf; *c=line_coding;
 }
-#endif
 void ch592_dap_init(void) {
     dap_serial_init();
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     chry_ringbuffer_init(&cdc_uart_tx_rb,cdc_uart_tx_pool,sizeof(cdc_uart_tx_pool));
-#endif
 #if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     DAP_Setup();
 #endif
     usbd_desc_register(0,&dap_descriptor);
     usbd_add_interface(0,&dap_intf); usbd_add_endpoint(0,&dap_out); usbd_add_endpoint(0,&dap_in);
-#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     usbd_add_interface(0,usbd_cdc_acm_init_intf(0,&cdc0_ctrl)); usbd_add_interface(0,usbd_cdc_acm_init_intf(0,&cdc0_data));
     usbd_add_endpoint(0,&cdc0_out); usbd_add_endpoint(0,&cdc0_in);
-#endif
     usbd_initialize(0,0x40008000,usbd_event_handler);
 }
+static void cdc_process_usb_out(void)
+{
 #if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
-static void usb_to_uart(void) {
-    uint8_t d[32]; uint32_t n=chry_ringbuffer_read(&cdc_uart_tx_rb,d,sizeof(d));
-    if(n) {
-        log_uart_data("TX", d, n);
-        UART0_SendString(d, (uint16_t)n);
+    uint8_t wireless_data[USB_MPS];
+    uint8_t wireless_length;
+    uint8_t config[7];
+    uint8_t config_length;
+
+    if(!wired_usb_active())
+    {
+        if(WirelessDAP_TakeCdcData(wireless_data, &wireless_length))
+        {
+            log_uart_data("RF->TX", wireless_data, wireless_length);
+            UART0_SendString(wireless_data, wireless_length);
+        }
+        if(WirelessDAP_TakeCdcConfig(config, &config_length) &&
+           (config_length == sizeof(config)))
+        {
+            uint32_t baud = (uint32_t)config[0] |
+                            ((uint32_t)config[1] << 8) |
+                            ((uint32_t)config[2] << 16) |
+                            ((uint32_t)config[3] << 24);
+            if(baud != 0U)
+            {
+                UART0_BaudRateCfg(baud);
+                PRINT("[RF CDC CFG] %lu baud, data=%u parity=%u stop=%u\n",
+                      (unsigned long)baud, config[6], config[5], config[4]);
+            }
+        }
     }
-}
-static void uart_to_usb(void) {
-    uint32_t n;
-    if(cdc_tx_busy) return; n=chry_ringbuffer_read(&cb_uart0,cdc_in_data,USB_MPS);
-    if(n) {
-        log_uart_data("RX", cdc_in_data, n);
-        activity_led_pulse(); cdc_tx_busy=1;
-        usbd_ep_start_write(0,CDC0_IN_EP,cdc_in_data,n);
-    }
-}
 #endif
+
+    if(cdc_usb_out_dropped != 0U)
+    {
+        uint32_t dropped = cdc_usb_out_dropped;
+        cdc_usb_out_dropped = 0U;
+        PRINT("[USB CDC OUT OVERFLOW] dropped=%lu\n",
+              (unsigned long)dropped);
+    }
+
+    if(cdc_usb_out_pending_length == 0U)
+    {
+        cdc_usb_out_pending_length = (uint8_t)chry_ringbuffer_read(
+            &cdc_uart_tx_rb, cdc_usb_out_pending, sizeof(cdc_usb_out_pending));
+        if(cdc_usb_out_pending_length != 0U)
+        {
+            PRINT("[USB CDC OUT] %u byte\n", cdc_usb_out_pending_length);
+        }
+    }
+    if(cdc_usb_out_pending_length == 0U)
+    {
+        return;
+    }
+
+#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
+    log_uart_data("TX", cdc_usb_out_pending, cdc_usb_out_pending_length);
+    UART0_SendString(cdc_usb_out_pending, cdc_usb_out_pending_length);
+    cdc_usb_out_pending_length = 0U;
+#else
+    if(WirelessDAP_SubmitCdcData(cdc_usb_out_pending,
+                                 cdc_usb_out_pending_length))
+    {
+        log_uart_data("USB->RF", cdc_usb_out_pending,
+                      cdc_usb_out_pending_length);
+        cdc_usb_out_pending_length = 0U;
+    }
+#endif
+}
+
+static void cdc_process_input(void)
+{
+    uint32_t length;
+
+    if(cdc_tx_busy &&
+       ((int32_t)(SYS_GetSysTickCnt() - cdc_tx_deadline) >= 0))
+    {
+        PRINT("[USB CDC IN RECOVER] completion timeout\n");
+        cdc_tx_busy = 0U;
+    }
+
+#if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
+    if(wired_usb_active())
+    {
+        if(cdc_tx_busy)
+        {
+            return;
+        }
+        length = chry_ringbuffer_read(&cb_uart0, cdc_in_data, USB_MPS);
+        if(length != 0U)
+        {
+            log_uart_data("RX", cdc_in_data, length);
+            activity_led_pulse();
+            cdc_tx_busy = 1U;
+            cdc_tx_deadline = SYS_GetSysTickCnt() + CDC_USB_IN_TIMEOUT_TICKS;
+            usbd_ep_start_write(0, CDC0_IN_EP, cdc_in_data, length);
+        }
+        return;
+    }
+
+    if(cdc_uart_pending_length == 0U)
+    {
+        uint32_t available = chry_ringbuffer_get_used(&cb_uart0);
+        uint32_t now;
+
+        if(available == 0U)
+        {
+            cdc_uart_observed_length = 0U;
+            return;
+        }
+
+        now = SYS_GetSysTickCnt();
+        if((available < sizeof(cdc_uart_pending)) &&
+           (available != cdc_uart_observed_length))
+        {
+            /* UART interrupt often exposes a burst as 1 + N bytes. Wait for
+             * a short quiet period so one serial burst becomes one RF packet. */
+            cdc_uart_observed_length = available;
+            cdc_uart_quiet_deadline = now + CDC_UART_COALESCE_TICKS;
+            return;
+        }
+        if((available < sizeof(cdc_uart_pending)) &&
+           ((int32_t)(now - cdc_uart_quiet_deadline) < 0))
+        {
+            return;
+        }
+
+        cdc_uart_pending_length = (uint8_t)chry_ringbuffer_read(
+            &cb_uart0, cdc_uart_pending, sizeof(cdc_uart_pending));
+        cdc_uart_observed_length = 0U;
+        if(cdc_uart_pending_length != 0U)
+        {
+            log_uart_data("RX PENDING", cdc_uart_pending,
+                          cdc_uart_pending_length);
+        }
+    }
+    if((cdc_uart_pending_length != 0U) &&
+       WirelessDAP_SubmitCdcData(cdc_uart_pending, cdc_uart_pending_length))
+    {
+        log_uart_data("RX->RF", cdc_uart_pending, cdc_uart_pending_length);
+        cdc_uart_pending_length = 0U;
+    }
+#else
+    uint8_t wireless_length;
+
+    if(cdc_config_pending_valid &&
+       WirelessDAP_SubmitCdcConfig(cdc_config_pending,
+                                   sizeof(cdc_config_pending)))
+    {
+        cdc_config_pending_valid = 0U;
+    }
+    if(cdc_tx_busy || !usb_device_is_configured(0))
+    {
+        return;
+    }
+    if(WirelessDAP_TakeCdcData(cdc_in_data, &wireless_length))
+    {
+        int usb_status;
+
+        length = wireless_length;
+        log_uart_data("RF->USB", cdc_in_data, length);
+        cdc_tx_busy = 1U;
+        cdc_tx_deadline = SYS_GetSysTickCnt() + CDC_USB_IN_TIMEOUT_TICKS;
+        usb_status = usbd_ep_start_write(0, CDC0_IN_EP, cdc_in_data, length);
+        PRINT("[USB CDC IN START] len=%lu status=%d\n",
+              (unsigned long)length, usb_status);
+        if(usb_status < 0)
+        {
+            cdc_tx_busy = 0U;
+        }
+    }
+#endif
+}
 static void dap_process(void) {
 #if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
     while ((dap_req_count_in != dap_req_count_out) &&
@@ -372,19 +540,19 @@ void ch592_dap_poll(void) {
 
     dap_process();
 #if FIRMWARE_ROLE == FIRMWARE_ROLE_DAPLINK
-    WirelessDAP_SetWiredActive(usb_device_is_configured(0));
-    if(!usb_device_is_configured(0) &&
+    WirelessDAP_SetWiredActive(wired_usb_active());
+    if(!wired_usb_active() &&
        WirelessDAP_TakeRequest(wireless_request, &wireless_length))
     {
         wireless_length = (uint8_t)DAP_ExecuteCommand(wireless_request,
                                                       wireless_response);
         WirelessDAP_SubmitResponse(wireless_response, wireless_length);
     }
-    usb_to_uart();
-    if(usb_device_is_configured(0)) uart_to_usb();
 #else
     (void)wireless_request;
     (void)wireless_response;
     (void)wireless_length;
 #endif
+    cdc_process_input();
+    cdc_process_usb_out();
 }

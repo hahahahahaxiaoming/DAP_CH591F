@@ -27,13 +27,20 @@ static void RF_PHY_StatusCallback(uint8_t status, uint8_t receive_status,
             break;
 
         case RX_MODE_RX_DATA:
-            /* receive_status == 0 表示 CRC 正确；buffer[0] 是 RSSI。 */
+            /* BASIC RX receives one packet and then enters idle, including
+             * packets rejected by CRC. Always notify the upper layer so it
+             * can restart RX; only expose payload when CRC is correct. */
             if((receive_status == 0U) && (receive_buffer != 0))
             {
                 rf_phy_callback(RF_PHY_EVENT_RX_DATA,
                                 (int8_t)receive_buffer[0],
                                 &receive_buffer[2],
                                 receive_buffer[1]);
+            }
+            else
+            {
+                rf_phy_callback(RF_PHY_EVENT_RX_FAILED,
+                                (int8_t)receive_status, 0, 0);
             }
             break;
 
